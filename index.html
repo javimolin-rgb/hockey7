@@ -151,6 +151,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .pref-line-label{font-size:12px;font-weight:600}
 .pref-side-labels{display:grid;grid-template-columns:58px repeat(3,minmax(0,1fr));gap:4px;font-size:10px;color:var(--muted);text-align:center}
 .opt[aria-current="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+.saved-menu{margin:2px 0 12px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);overflow:hidden}
+.saved-menu>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;cursor:pointer;font-size:13px;font-weight:700;list-style:none}
+.saved-menu>summary::-webkit-details-marker{display:none}
+.saved-menu>summary::marker{content:""}
+.saved-chevron{font-size:18px;line-height:1;transition:transform .15s ease}
+.saved-menu[open] .saved-chevron{transform:rotate(180deg)}
+.saved-menu-content{padding:0 10px 10px;background:var(--surface)}
+.saved-menu[open]>summary{border-bottom:1px solid var(--line);margin-bottom:8px}
 .saved-tools{display:flex;gap:7px;margin:10px 0 8px;flex-wrap:wrap}
 .saved-tools input{flex:1 1 150px;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);padding:9px 10px;font:inherit}
 .saved-list{display:grid;gap:7px;margin-top:8px}
@@ -173,9 +181,13 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   <section class="card form" aria-labelledby="h-form">
     <div class="sec-top"><h2 id="h-form">Formación</h2><span class="hint">defensas-medios-delanteras</span></div>
     <div class="presets" id="presets"></div>
-    <p class="hint">Formaciones guardadas para todo el equipo</p>
-    <div class="saved-tools"><input id="formationName" type="text" maxlength="40" placeholder="Nombre de la formación" aria-label="Nombre de la formación"><button type="button" class="btn" id="saveFormation">Guardar formación</button></div>
-    <div class="saved-list" id="savedFormations"><p class="saved-empty">Cargando formaciones compartidas…</p></div>
+    <details class="saved-menu">
+      <summary><span>Formaciones guardadas para todo el equipo</span><span class="saved-chevron" aria-hidden="true">⌄</span></summary>
+      <div class="saved-menu-content">
+        <div class="saved-tools"><input id="formationName" type="text" maxlength="40" placeholder="Nombre de la formación" aria-label="Nombre de la formación"><button type="button" class="btn" id="saveFormation">Guardar</button></div>
+        <div class="saved-list" id="savedFormations"><p class="saved-empty">Cargando formaciones compartidas…</p></div>
+      </div>
+    </details>
     <div class="steppers" id="steppers"></div>
     <p class="total" id="total" aria-live="polite"></p>
   </section>
@@ -656,7 +668,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
     var root=$('sheetRoot');
     if(state.preferencesOpen){
       var grid='<div class="pref-side-labels"><div></div><div>Izquierda</div><div>Centro</div><div>Derecha</div></div>';
-      PLAYERS.forEach(function(p){grid+='<section class="pref-player"><div class="pref-player-title">'+swatch(p)+'<span>'+p.name+'</span></div>';['D','M','F'].forEach(function(L){grid+='<div class="pref-line"><span class="pref-line-label">'+LINES[L].name+'</span>';SIDES.forEach(function(S){var v=state.prefs[p.id][L][S],key=p.id+'-'+L+'-'+S;grid+='<select class="pref-select" data-pref="'+p.id+'" data-line="'+L+'" data-side="'+S+'" aria-label="Preferencia '+p.name+' '+LINES[L].name+' '+sideLabel(S)+'"><option value="2"'+(v===2?' selected':'')+'>Preferida</option><option value="1"'+(v===1?' selected':'')+'>Aceptable</option><option value="0"'+(v===0?' selected':'')+'>No juega</option></select>'});grid+='</div>'});grid+='</section>'});
+      PLAYERS.forEach(function(p){grid+='<section class="pref-player"><div class="pref-player-title">'+swatch(p)+'<span>'+p.name+'</span></div>';['F','M','D'].forEach(function(L){grid+='<div class="pref-line"><span class="pref-line-label">'+LINES[L].name+'</span>';SIDES.forEach(function(S){var v=state.prefs[p.id][L][S],key=p.id+'-'+L+'-'+S;grid+='<select class="pref-select" data-pref="'+p.id+'" data-line="'+L+'" data-side="'+S+'" aria-label="Preferencia '+p.name+' '+LINES[L].name+' '+sideLabel(S)+'"><option value="2"'+(v===2?' selected':'')+'>Preferida</option><option value="1"'+(v===1?' selected':'')+'>Aceptable</option><option value="0"'+(v===0?' selected':'')+'>No juega</option></select>'});grid+='</div>'});grid+='</section>'});
       root.innerHTML='<div class="scrim" data-closeprefs="1"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Ajustar preferencias de jugadoras"><div class="sheet-in"><div class="sheet-top"><div class="t"><h2>Preferencias por jugadora</h2></div><button type="button" class="btn alt" data-closeprefs="1">Cerrar</button></div><p class="hint">Ajusta por línea y lado: lateral izquierdo, central o lateral derecho. El randomizador prioriza “Preferida”, acepta “Aceptable” y evita “No juega”.</p>'+grid+'</div></div>';return;
     }
     if(!state.open){root.innerHTML='';return}
