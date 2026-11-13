@@ -156,7 +156,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 
 <main class="wrap">
   <header class="head">
-    <h1>Alineación Hockey 7</h1>
+    <h1>Alineación Hockey 7</h1><p class="hint" id="cloudStatus" role="status">Conectando con la sincronización…</p>
   </header>
 
   <section class="card form" aria-labelledby="h-form">
@@ -251,6 +251,111 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
     }
   }catch(e){}
   function save(){try{localStorage.setItem(KEY,JSON.stringify({counts:state.counts,assign:state.assign,previewOn:state.previewOn,prefs:state.prefs}))}catch(e){}}
+
+  // Sincronización compartida de preferencias mediante Supabase REST.
+  // El proyecto y la Publishable key corresponden al proyecto de Javi.
+  var SUPABASE_URL='https://czkwrgxxxoidglqszfhn.supabase.co';
+  var SUPABASE_PUBLISHABLE_KEY='sb_publishable_c0quiYSGZJC2sQ2yplWHbw_zLAMOnrb';
+  var SUPABASE_TABLE='hockey7_preferences';
+  var CLOUD_TEAM_ID='hockey7';
+  var cloudReady=false,cloudBusy=false,cloudTimer=null,cloudLastLocalWrite=0;
+
+  function cloudHeaders(extra){
+    var h={
+      'apikey':SUPABASE_PUBLISHABLE_KEY,
+      'Authorization':'Bearer '+SUPABASE_PUBLISHABLE_KEY,
+      'Content-Type':'application/json'
+    };
+    if(extra)Object.keys(extra).forEach(function(k){h[k]=extra[k]});
+    return h;
+  }
+  function cloudStatus(msg,isError){
+    var el=$('cloudStatus');
+    if(el){el.textContent=msg;el.style.color=isError?'var(--warn)':'var(--muted)'}
+  }
+  function cloudSnapshot(pid){
+    return JSON.parse(JSON.stringify(state.prefs[pid]));
+  }
+  function cloudUpsert(rows){
+    if(!rows.length)return Promise.resolve();
+    return fetch(SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+'?on_conflict=team_id,player_id',{
+      method:'POST',
+      headers:cloudHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body:JSON.stringify(rows)
+    }).then(function(r){
+      if(!r.ok)return r.text().then(function(t){throw new Error(t||('HTTP '+r.status))});
+    });
+  }
+  function cloudSavePlayer(pid){
+    if(!cloudReady)return;
+    cloudLastLocalWrite=Date.now();
+    cloudStatus('Guardando preferencias…');
+    cloudUpsert([{
+      team_id:CLOUD_TEAM_ID,
+      player_id:pid,
+      preferences:cloudSnapshot(pid),
+      updated_at:new Date().toISOString()
+    }]).then(function(){
+      cloudStatus('Preferencias sincronizadas');
+    }).catch(function(err){
+      console.error('Supabase:',err);
+      cloudStatus('No se pudo sincronizar. Revisa la configuración de Supabase.',true);
+    });
+  }
+  function cloudPull(){
+    if(cloudBusy)return Promise.resolve();
+    cloudBusy=true;
+    return fetch(SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+
+      '?team_id=eq.'+encodeURIComponent(CLOUD_TEAM_ID)+'&select=player_id,preferences,updated_at',{
+        method:'GET',headers:cloudHeaders()
+      }).then(function(r){
+        if(!r.ok)return r.text().then(function(t){throw new Error(t||('HTTP '+r.status))});
+        return r.json();
+      }).then(function(rows){
+        var valid=0,missing=[];
+        if(rows.length){
+          // Evita que una consulta periódica pise un cambio que aún se está guardando.
+          if(Date.now()-cloudLastLocalWrite>1800){
+            rows.forEach(function(row){
+              if(!state.prefs[row.player_id]||!row.preferences)return;
+              ['D','M','F'].forEach(function(L){
+                if(!row.preferences[L])return;
+                SIDES.forEach(function(S){
+                  var v=row.preferences[L][S];
+                  if(v===0||v===1||v===2)state.prefs[row.player_id][L][S]=v;
+                });
+              });
+              valid++;
+            });
+            save();
+            if(state.preferencesOpen)renderSheet();
+          }
+          PLAYERS.forEach(function(p){
+            if(!rows.some(function(r){return r.player_id===p.id})){
+              missing.push({team_id:CLOUD_TEAM_ID,player_id:p.id,preferences:cloudSnapshot(p.id),updated_at:new Date().toISOString()});
+            }
+          });
+          return cloudUpsert(missing).then(function(){cloudStatus('Preferencias sincronizadas');});
+        }
+        // Primera conexión: si la tabla está vacía, conserva las preferencias locales y súbelas.
+        var initial=PLAYERS.map(function(p){
+          return {team_id:CLOUD_TEAM_ID,player_id:p.id,preferences:cloudSnapshot(p.id),updated_at:new Date().toISOString()};
+        });
+        return cloudUpsert(initial).then(function(){cloudStatus('Preferencias sincronizadas');});
+      }).catch(function(err){
+        console.error('Supabase:',err);
+        cloudStatus('Error de conexión. Revisa la tabla y las políticas RLS.',true);
+      }).then(function(){cloudBusy=false});
+  }
+  function startCloudSync(){
+    cloudStatus('Conectando con la sincronización…');
+    cloudPull().then(function(){
+      cloudReady=true;
+      if(cloudTimer)clearInterval(cloudTimer);
+      cloudTimer=setInterval(cloudPull,5000);
+    });
+  }
+
 
   function lum(hex){
     var n=parseInt(hex.slice(1),16),r=n>>16&255,g=n>>8&255,b=n&255;
@@ -541,7 +646,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
     toast('Cambio aplicado');
   }
 
-  document.addEventListener('change',function(e){var t=e.target;if(t&&t.matches('[data-pref]')){var pid=t.dataset.pref,L=t.dataset.line,S=t.dataset.side;state.prefs[pid][L][S]=parseInt(t.value,10);save();}});
+  document.addEventListener('change',function(e){var t=e.target;if(t&&t.matches('[data-pref]')){var pid=t.dataset.pref,L=t.dataset.line,S=t.dataset.side;state.prefs[pid][L][S]=parseInt(t.value,10);save();cloudSavePlayer(pid);}});
 
   $('pvOn').checked=state.previewOn;
   $('pvOn').addEventListener('change',function(e){state.previewOn=e.target.checked;if(!state.previewOn)state.preview=null;save();render()});
@@ -611,6 +716,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   });
 
   render();
+  startCloudSync();
 })();
 </script>
 
