@@ -606,9 +606,6 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
       else{state.clearAsk=true;renderSum();clearTimeout(clearTimer);clearTimer=setTimeout(function(){state.clearAsk=false;renderSum()},3000)}
     }
   });
-  document.addEventListener('change',function(e){
-    var t=e.target;if(t&&t.dataset&&t.dataset.pref&&t.dataset.line){state.prefs[t.dataset.pref][t.dataset.line]=parseInt(t.value,10);save();renderSheet();}
-  });
   document.addEventListener('keydown',function(e){
     if(e.key==='Escape'){if(state.preferencesOpen){state.preferencesOpen=false;render()}else if(state.open){state.open=null;render()}else if(state.armed){resetPick();render()}}
   });
