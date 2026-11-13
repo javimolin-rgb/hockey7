@@ -151,6 +151,17 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .pref-line-label{font-size:12px;font-weight:600}
 .pref-side-labels{display:grid;grid-template-columns:58px repeat(3,minmax(0,1fr));gap:4px;font-size:10px;color:var(--muted);text-align:center}
 .opt[aria-current="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+.saved-tools{display:flex;gap:7px;margin:10px 0 8px;flex-wrap:wrap}
+.saved-tools input{flex:1 1 150px;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);padding:9px 10px;font:inherit}
+.saved-list{display:grid;gap:7px;margin-top:8px}
+.saved-empty{margin:0;color:var(--muted);font-size:13px}
+.saved-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);min-width:0}
+.saved-item-info{display:grid;gap:2px;min-width:0}
+.saved-item-info b{overflow-wrap:anywhere}
+.saved-item-info small{color:var(--muted);font-size:12px}
+.saved-item-actions{display:flex;gap:5px;flex:none}
+.saved-item-actions .btn{padding:6px 9px;font-size:12px}
+@media(max-width:420px){.saved-item{align-items:flex-start;flex-direction:column}.saved-item-actions{width:100%}.saved-item-actions .btn{flex:1}}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;z-index:30;font-weight:500;max-width:90vw}
 </style>
 
@@ -162,6 +173,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   <section class="card form" aria-labelledby="h-form">
     <div class="sec-top"><h2 id="h-form">Formación</h2><span class="hint">defensas-medios-delanteras</span></div>
     <div class="presets" id="presets"></div>
+    <p class="hint">Formaciones guardadas para todo el equipo</p>
+    <div class="saved-tools"><input id="formationName" type="text" maxlength="40" placeholder="Nombre de la formación" aria-label="Nombre de la formación"><button type="button" class="btn" id="saveFormation">Guardar formación</button></div>
+    <div class="saved-list" id="savedFormations"><p class="saved-empty">Cargando formaciones compartidas…</p></div>
     <div class="steppers" id="steppers"></div>
     <p class="total" id="total" aria-live="polite"></p>
   </section>
@@ -259,6 +273,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   var SUPABASE_TABLE='hockey7_preferences';
   var CLOUD_TEAM_ID='hockey7';
   var cloudReady=false,cloudBusy=false,cloudTimer=null,cloudLastLocalWrite=0;
+  var SAVED_FORMATIONS_TABLE="hockey7_saved_formations";
+  var savedFormations=[],savedFormationsBusy=false;
 
   function cloudHeaders(extra){
     var h={
@@ -347,12 +363,81 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
         cloudStatus('Error de conexión. Revisa la tabla y las políticas RLS.',true);
       }).then(function(){cloudBusy=false});
   }
+  function escapeHTML(value){
+    return String(value==null?'':value).replace(/[&<>"']/g,function(ch){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+    });
+  }
+  function renderSavedFormations(){
+    var el=$('savedFormations');
+    if(!el)return;
+    if(!savedFormations.length){
+      el.innerHTML='<p class="saved-empty">Todavía no hay formaciones guardadas. Guarda una para que el equipo pueda usarla.</p>';
+      return;
+    }
+    el.innerHTML=savedFormations.map(function(f){
+      var c=f.counts||{},d=Number(c.D)||0,m=Number(c.M)||0,fw=Number(c.F)||0;
+      return '<div class="saved-item"><div class="saved-item-info"><b>'+escapeHTML(f.name)+'</b><small>Defensas - Medios - Delanteras: '+d+'-'+m+'-'+fw+'</small></div><div class="saved-item-actions"><button type="button" class="btn" data-load-formation="'+escapeHTML(f.formation_id)+'">Cargar</button><button type="button" class="btn alt" data-delete-formation="'+escapeHTML(f.formation_id)+'">Eliminar</button></div></div>';
+    }).join('');
+  }
+  function cloudLoadFormations(){
+    if(savedFormationsBusy)return Promise.resolve();
+    savedFormationsBusy=true;
+    return fetch(SUPABASE_URL+'/rest/v1/'+SAVED_FORMATIONS_TABLE+
+      '?team_id=eq.'+encodeURIComponent(CLOUD_TEAM_ID)+'&select=formation_id,name,counts,assignments,updated_at&order=updated_at.desc',{
+        method:'GET',headers:cloudHeaders()
+      }).then(function(r){
+        if(!r.ok)return r.text().then(function(t){throw new Error(t||('HTTP '+r.status))});
+        return r.json();
+      }).then(function(rows){
+        savedFormations=rows||[];renderSavedFormations();
+      }).catch(function(err){
+        console.error('Formaciones compartidas:',err);
+        var el=$('savedFormations');
+        if(el)el.innerHTML='<p class="saved-empty">No se pudieron cargar las formaciones compartidas. Revisa la tabla en Supabase.</p>';
+      }).then(function(){savedFormationsBusy=false;});
+  }
+  function cloudSaveFormation(name){
+    var id='f-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9);
+    var row={team_id:CLOUD_TEAM_ID,formation_id:id,name:name,
+      counts:{D:state.counts.D,M:state.counts.M,F:state.counts.F},
+      assignments:JSON.parse(JSON.stringify(state.assign)),updated_at:new Date().toISOString()};
+    return fetch(SUPABASE_URL+'/rest/v1/'+SAVED_FORMATIONS_TABLE+'?on_conflict=team_id,formation_id',{
+      method:'POST',headers:cloudHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify(row)
+    }).then(function(r){
+      if(!r.ok)return r.text().then(function(t){throw new Error(t||('HTTP '+r.status))});
+      return cloudLoadFormations();
+    });
+  }
+  function cloudDeleteFormation(id){
+    return fetch(SUPABASE_URL+'/rest/v1/'+SAVED_FORMATIONS_TABLE+
+      '?team_id=eq.'+encodeURIComponent(CLOUD_TEAM_ID)+'&formation_id=eq.'+encodeURIComponent(id),{
+        method:'DELETE',headers:cloudHeaders({'Prefer':'return=minimal'})
+    }).then(function(r){
+      if(!r.ok)return r.text().then(function(t){throw new Error(t||('HTTP '+r.status))});
+      return cloudLoadFormations();
+    });
+  }
+  function applySavedFormation(id){
+    var f=savedFormations.find(function(x){return x.formation_id===id});if(!f)return;
+    var c=f.counts||{},counts={D:Number(c.D),M:Number(c.M),F:Number(c.F)};
+    if(!['D','M','F'].every(function(L){return Number.isInteger(counts[L])&&counts[L]>=LINES[L].min&&counts[L]<=LINES[L].max})||counts.D+counts.M+counts.F>TOTAL){
+      toast('Esta formación tiene cantidades inválidas.');return;
+    }
+    var clean={},seen={};
+    Object.keys(f.assignments||{}).forEach(function(k){
+      var L=k.charAt(0),i=parseInt(k.slice(1),10),pid=f.assignments[k];
+      if(LINES[L]&&Number.isInteger(i)&&i>=0&&i<counts[L]&&BYID[pid]&&!seen[pid]){clean[k]=pid;seen[pid]=true;}
+    });
+    state.counts=counts;state.assign=clean;resetPick();state.open=null;state.preferencesOpen=false;
+    save();render();toast('Formación «'+f.name+'» cargada');
+  }
   function startCloudSync(){
     cloudStatus('Conectando con la sincronización…');
     cloudPull().then(function(){
-      cloudReady=true;
+      cloudReady=true;cloudLoadFormations();
       if(cloudTimer)clearInterval(cloudTimer);
-      cloudTimer=setInterval(cloudPull,5000);
+      cloudTimer=setInterval(function(){cloudPull();cloudLoadFormations();},5000);
     });
   }
 
@@ -653,9 +738,25 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   window.addEventListener('resize',drawArrows);
 
   document.addEventListener('click',function(e){
-    var t=e.target.closest('[data-preset],[data-step],[data-slot],[data-pid],[data-pick],[data-close],[data-closeprefs],[data-cancel],[data-apply],#copy,#clear,#randomize,#editPrefs');
+    var t=e.target.closest('[data-preset],[data-step],[data-slot],[data-pid],[data-pick],[data-close],[data-closeprefs],[data-cancel],[data-apply],[data-load-formation],[data-delete-formation],#copy,#clear,#randomize,#editPrefs,#saveFormation');
     if(!t)return;
     if(t.id==='editPrefs'){state.preferencesOpen=true;state.open=null;renderSheet();return}
+    if(t.id==='saveFormation'){
+      var name=$('formationName').value.trim();
+      if(!name){toast('Escribe un nombre para guardar la formación.');$('formationName').focus();return}
+      if(!cloudReady){toast('Espera a que se conecte la sincronización.');return}
+      cloudSaveFormation(name).then(function(){$('formationName').value='';toast('Formación guardada para todo el equipo');})
+        .catch(function(err){console.error('Guardar formación:',err);toast('No se pudo guardar. Revisa la tabla de formaciones en Supabase.');});
+      return;
+    }
+    if(t.dataset.loadFormation){applySavedFormation(t.dataset.loadFormation);return}
+    if(t.dataset.deleteFormation){
+      var removeId=t.dataset.deleteFormation;
+      if(!confirm('¿Eliminar esta formación guardada para todo el equipo?'))return;
+      cloudDeleteFormation(removeId).then(function(){toast('Formación eliminada');})
+        .catch(function(err){console.error('Eliminar formación:',err);toast('No se pudo eliminar la formación.');});
+      return;
+    }
     if(t.dataset.closeprefs){state.preferencesOpen=false;render();return}
     if(t.id==='randomize'){randomizeLineup();return}
     if(t.dataset.preset){
