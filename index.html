@@ -101,7 +101,10 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .pc{display:flex;align-items:center;gap:10px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
 .pc[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
 .pc.placed{background:var(--surface-2)}
-  .pref-actions{display:flex;gap:6px;flex-wrap:wrap}
+  .pref-actions{display:flex;gap:6px;flex-wrap:nowrap;width:100%}
+  .pref-actions .btn{flex:1 1 0;min-width:0;padding:8px 5px;font-size:13px;white-space:normal;line-height:1.15}
+  .bench .sec-top{align-items:flex-start;flex-direction:column}
+  .bench .sec-top h2{width:100%}
   .pref-select{font:inherit;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;min-width:0;width:100%}
   .pref-grid{display:grid;grid-template-columns:minmax(90px,1fr) repeat(3,minmax(90px,1fr));gap:8px;align-items:center}
   .pref-grid .headcell{font-size:12px;font-weight:700;color:var(--muted);text-align:center}
@@ -137,6 +140,16 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .opt .tx small{color:var(--muted);font-size:12px}
 .opt .ok{color:var(--ink);font-weight:600}
 .opt.off{opacity:.8}
+.opt.in-court{background:var(--surface-2);border-color:var(--ink)}
+.opt.on-bench{opacity:.92}
+.opt .status{font-size:11px;font-weight:700;border-radius:6px;padding:3px 6px;white-space:nowrap}
+.opt .status.court{background:var(--ink);color:var(--bg)}
+.opt .status.bench{background:var(--surface-2);color:var(--muted)}
+.pref-player{border:1px solid var(--line);border-radius:10px;padding:9px;margin:8px 0}
+.pref-player-title{display:flex;align-items:center;gap:7px;font-weight:700;margin-bottom:7px}
+.pref-line{display:grid;grid-template-columns:58px repeat(3,minmax(0,1fr));gap:4px;align-items:center;margin:4px 0}
+.pref-line-label{font-size:12px;font-weight:600}
+.pref-side-labels{display:grid;grid-template-columns:58px repeat(3,minmax(0,1fr));gap:4px;font-size:10px;color:var(--muted);text-align:center}
 .opt[aria-current="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;z-index:30;font-weight:500;max-width:90vw}
 </style>
@@ -144,7 +157,6 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 <main class="wrap">
   <header class="head">
     <h1>Alineación Hockey 7</h1>
-    <p>Toca una posición para elegir quién juega ahí. Antes de aplicar, la cancha muestra el cambio con flechas. Cada jugadora ocupa un solo lugar a la vez. Parte con la cancha vacía, como al limpiar cancha; arma la alineación como quieras.</p>
   </header>
 
   <section class="card form" aria-labelledby="h-form">
@@ -203,7 +215,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
     {id:'gaby',name:'Gaby',ini:'GAB',color:'#00897B',lines:['D','F']}
   ];
   var BYID={};PLAYERS.forEach(function(p){BYID[p.id]=p});
-  var DEFAULT_PREFS={};PLAYERS.forEach(function(p){DEFAULT_PREFS[p.id]={D:p.lines.indexOf('D')>-1?2:0,M:p.lines.indexOf('M')>-1?2:0,F:p.lines.indexOf('F')>-1?2:0}});
+  var SIDES=['left','center','right'];
+  var DEFAULT_PREFS={};PLAYERS.forEach(function(p){DEFAULT_PREFS[p.id]={};['D','M','F'].forEach(function(L){DEFAULT_PREFS[p.id][L]={left:p.lines.indexOf(L)>-1?2:0,center:p.lines.indexOf(L)>-1?2:0,right:p.lines.indexOf(L)>-1?2:0}})});
 
   var state={
     counts:{D:3,M:3,F:1},
@@ -233,7 +246,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
           state.counts=s.counts;state.assign=clean;
         }
         if(typeof s.previewOn==='boolean')state.previewOn=s.previewOn;
-        if(s.prefs&&typeof s.prefs==='object'){PLAYERS.forEach(function(p){var pr=s.prefs[p.id];if(pr){['D','M','F'].forEach(function(L){if(pr[L]===0||pr[L]===1||pr[L]===2)state.prefs[p.id][L]=pr[L]})}})}
+        if(s.prefs&&typeof s.prefs==='object'){PLAYERS.forEach(function(p){var pr=s.prefs[p.id];if(pr){['D','M','F'].forEach(function(L){if(pr[L]===0||pr[L]===1||pr[L]===2){SIDES.forEach(function(S){state.prefs[p.id][L][S]=pr[L]})}else if(pr[L]&&typeof pr[L]==='object'){SIDES.forEach(function(S){if(pr[L][S]===0||pr[L][S]===1||pr[L][S]===2)state.prefs[p.id][L][S]=pr[L][S]})}})}})}
       }
     }
   }catch(e){}
@@ -305,6 +318,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
     save();
   }
   function formName(){return state.counts.D+'-'+state.counts.M+'-'+state.counts.F}
+  function sideOfSlot(k){var L=k.charAt(0),i=parseInt(k.slice(1),10),names=(POS[state.counts[L]]||[]),name=(names[i]||'centro').toLowerCase();if(name.indexOf('izq')>-1)return 'left';if(name.indexOf('der')>-1)return 'right';return 'center'}
+  function sideLabel(S){return S==='left'?'Lateral izq.':S==='right'?'Lateral der.':'Central'}
   function resetPick(){state.armed=null;state.preview=null}
 
   var $=function(id){return document.getElementById(id)};
@@ -450,10 +465,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   function renderSheet(){
     var root=$('sheetRoot');
     if(state.preferencesOpen){
-      var grid='<div class="pref-grid"><div></div><div class="headcell">Defensa</div><div class="headcell">Medio</div><div class="headcell">Delantera</div>';
-      PLAYERS.forEach(function(p){grid+='<div class="playercell">'+swatch(p)+'<span>'+p.name+'</span></div>';['D','M','F'].forEach(function(L){var v=state.prefs[p.id][L];grid+='<select class="pref-select" data-pref="'+p.id+'" data-line="'+L+'" aria-label="Preferencia de '+p.name+' para '+LINES[L].name+'"><option value="2"'+(v===2?' selected':'')+'>Preferida</option><option value="1"'+(v===1?' selected':'')+'>Aceptable</option><option value="0"'+(v===0?' selected':'')+'>No juega</option></select>'})});
-      grid+='</div>';
-      root.innerHTML='<div class="scrim" data-closeprefs="1"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Ajustar preferencias de jugadoras"><div class="sheet-in"><div class="sheet-top"><div class="t"><h2>Preferencias por jugadora</h2></div><button type="button" class="btn alt" data-closeprefs="1">Cerrar</button></div><p class="hint">Indica qué líneas prefiere cada jugadora. El randomizador prioriza “Preferida”, puede asignar “Aceptable” y excluye “No juega”.</p>'+grid+'</div></div>';return;
+      var grid='<div class="pref-side-labels"><div></div><div>Izquierda</div><div>Centro</div><div>Derecha</div></div>';
+      PLAYERS.forEach(function(p){grid+='<section class="pref-player"><div class="pref-player-title">'+swatch(p)+'<span>'+p.name+'</span></div>';['D','M','F'].forEach(function(L){grid+='<div class="pref-line"><span class="pref-line-label">'+LINES[L].name+'</span>';SIDES.forEach(function(S){var v=state.prefs[p.id][L][S],key=p.id+'-'+L+'-'+S;grid+='<select class="pref-select" data-pref="'+p.id+'" data-line="'+L+'" data-side="'+S+'" aria-label="Preferencia '+p.name+' '+LINES[L].name+' '+sideLabel(S)+'"><option value="2"'+(v===2?' selected':'')+'>Preferida</option><option value="1"'+(v===1?' selected':'')+'>Aceptable</option><option value="0"'+(v===0?' selected':'')+'>No juega</option></select>'});grid+='</div>'});grid+='</section>'});
+      root.innerHTML='<div class="scrim" data-closeprefs="1"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Ajustar preferencias de jugadoras"><div class="sheet-in"><div class="sheet-top"><div class="t"><h2>Preferencias por jugadora</h2></div><button type="button" class="btn alt" data-closeprefs="1">Cerrar</button></div><p class="hint">Ajusta por línea y lado: lateral izquierdo, central o lateral derecho. El randomizador prioriza “Preferida”, acepta “Aceptable” y evita “No juega”.</p>'+grid+'</div></div>';return;
     }
     if(!state.open){root.innerHTML='';return}
     var k=state.open,L=k.charAt(0),cur=state.assign[k];
@@ -468,9 +482,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
       else if(sk&&state.assign[k])sub='Intercambia con '+slotName(sk);
       else if(sk)sub='Se mueve desde '+slotName(sk);
       else sub='Disponible';
-      return '<button type="button" class="opt'+(fit?'':' off')+'" data-pick="'+p.id+'"'+(here?' aria-current="true"':'')+'>'+swatch(p)+
+      return '<button type="button" class="opt '+(sk?'in-court':'on-bench')+(fit?'':' off')+'" data-pick="'+p.id+'"'+(here?' aria-current="true"':'')+'>'+swatch(p)+
         '<span class="tx"><b>'+p.name+'</b><small>'+sub+'</small></span>'+
-        (fit?'<span class="ok">Puede jugar aquí</span>':'<small>Fuera de su rol</small>')+rolesHTML(p)+'</button>';
+        '<span class="status '+(sk?'court':'bench')+'">'+(sk?'EN CANCHA':'BANCA')+'</span>'+(fit?'<span class="ok">Puede jugar aquí</span>':'<small>Fuera de su rol</small>')+rolesHTML(p)+'</button>';
     }).join('');
     root.innerHTML='<div class="scrim" data-close="1"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Elegir jugadora para '+slotName(k)+'"><div class="sheet-in">'+
       '<div class="sheet-top"><div class="t">'+icon(LINES[L].shape,26)+'<h2>'+slotName(k)+'</h2></div><button type="button" class="btn alt" data-close="1" id="sheetClose">Cerrar</button></div>'+
@@ -506,10 +520,10 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
       var order=slots.slice().sort(function(){return Math.random()-.5});
       var unused=PLAYERS.slice(),candidate={},filled=0,score=0;
       order.forEach(function(k){
-        var L=k.charAt(0),eligible=unused.filter(function(p){return state.prefs[p.id][L]>0});
+        var L=k.charAt(0),S=sideOfSlot(k),eligible=unused.filter(function(p){return state.prefs[p.id][L][S]>0});
         if(!eligible.length)return;
-        var top=Math.max.apply(null,eligible.map(function(p){return state.prefs[p.id][L]}));
-        var tied=eligible.filter(function(p){return state.prefs[p.id][L]===top});
+        var top=Math.max.apply(null,eligible.map(function(p){return state.prefs[p.id][L][S]}));
+        var tied=eligible.filter(function(p){return state.prefs[p.id][L][S]===top});
         var chosen=tied[Math.floor(Math.random()*tied.length)];
         candidate[k]=chosen.id;unused=unused.filter(function(p){return p.id!==chosen.id});filled++;score+=top;
       });
@@ -526,6 +540,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
     resetPick();render();
     toast('Cambio aplicado');
   }
+
+  document.addEventListener('change',function(e){var t=e.target;if(t&&t.matches('[data-pref]')){var pid=t.dataset.pref,L=t.dataset.line,S=t.dataset.side;state.prefs[pid][L][S]=parseInt(t.value,10);save();}});
 
   $('pvOn').checked=state.previewOn;
   $('pvOn').addEventListener('change',function(e){state.previewOn=e.target.checked;if(!state.previewOn)state.preview=null;save();render()});
