@@ -101,6 +101,13 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .pc{display:flex;align-items:center;gap:10px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
 .pc[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
 .pc.placed{background:var(--surface-2)}
+  .pref-actions{display:flex;gap:6px;flex-wrap:wrap}
+  .pref-select{font:inherit;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;min-width:0;width:100%}
+  .pref-grid{display:grid;grid-template-columns:minmax(90px,1fr) repeat(3,minmax(90px,1fr));gap:8px;align-items:center}
+  .pref-grid .headcell{font-size:12px;font-weight:700;color:var(--muted);text-align:center}
+  .pref-grid .playercell{font-weight:600;display:flex;align-items:center;gap:6px;min-width:0}
+  .pref-grid .playercell .sw{width:28px;height:28px;font-size:10px}
+  @media(max-width:520px){.pref-grid{grid-template-columns:minmax(76px,1fr) repeat(3,minmax(70px,1fr));gap:5px}.pref-select{padding:5px;font-size:12px}}
 .sw{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--font-body);border:2px solid var(--ink)}
 .pc .tx{display:grid;min-width:0;gap:1px}
 .pc .tx b{font-size:15px}
@@ -155,7 +162,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   </section>
 
   <section class="card bench" aria-labelledby="h-bench">
-    <div class="sec-top"><h2 id="h-bench">Jugadoras</h2><span class="hint">Toca una y luego una posición</span></div>
+    <div class="sec-top"><h2 id="h-bench">Jugadoras</h2><div class="pref-actions"><button type="button" class="btn" id="randomize">Randomizar posiciones</button><button type="button" class="btn alt" id="editPrefs">Ajustar preferencias</button></div></div><p class="hint">Toca una jugadora y luego una posición para asignarla manualmente.</p>
     <div class="plist" id="bench"></div>
   </section>
 
@@ -196,6 +203,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
     {id:'gaby',name:'Gaby',ini:'GAB',color:'#00897B',lines:['D','F']}
   ];
   var BYID={};PLAYERS.forEach(function(p){BYID[p.id]=p});
+  var DEFAULT_PREFS={};PLAYERS.forEach(function(p){DEFAULT_PREFS[p.id]={D:p.lines.indexOf('D')>-1?2:0,M:p.lines.indexOf('M')>-1?2:0,F:p.lines.indexOf('F')>-1?2:0}});
 
   var state={
     counts:{D:3,M:3,F:1},
@@ -204,7 +212,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
     preview:null,
     previewOn:true,
     open:null,
-    clearAsk:false
+    clearAsk:false,
+    preferencesOpen:false,
+    prefs:JSON.parse(JSON.stringify(DEFAULT_PREFS))
   };
   var KEY='hockey7-alineacion-v2';
   try{
@@ -223,10 +233,11 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
           state.counts=s.counts;state.assign=clean;
         }
         if(typeof s.previewOn==='boolean')state.previewOn=s.previewOn;
+        if(s.prefs&&typeof s.prefs==='object'){PLAYERS.forEach(function(p){var pr=s.prefs[p.id];if(pr){['D','M','F'].forEach(function(L){if(pr[L]===0||pr[L]===1||pr[L]===2)state.prefs[p.id][L]=pr[L]})}})}
       }
     }
   }catch(e){}
-  function save(){try{localStorage.setItem(KEY,JSON.stringify({counts:state.counts,assign:state.assign,previewOn:state.previewOn}))}catch(e){}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify({counts:state.counts,assign:state.assign,previewOn:state.previewOn,prefs:state.prefs}))}catch(e){}}
 
   function lum(hex){
     var n=parseInt(hex.slice(1),16),r=n>>16&255,g=n>>8&255,b=n&255;
@@ -438,6 +449,12 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   }
   function renderSheet(){
     var root=$('sheetRoot');
+    if(state.preferencesOpen){
+      var grid='<div class="pref-grid"><div></div><div class="headcell">Defensa</div><div class="headcell">Medio</div><div class="headcell">Delantera</div>';
+      PLAYERS.forEach(function(p){grid+='<div class="playercell">'+swatch(p)+'<span>'+p.name+'</span></div>';['D','M','F'].forEach(function(L){var v=state.prefs[p.id][L];grid+='<select class="pref-select" data-pref="'+p.id+'" data-line="'+L+'" aria-label="Preferencia de '+p.name+' para '+LINES[L].name+'"><option value="2"'+(v===2?' selected':'')+'>Preferida</option><option value="1"'+(v===1?' selected':'')+'>Aceptable</option><option value="0"'+(v===0?' selected':'')+'>No juega</option></select>'})});
+      grid+='</div>';
+      root.innerHTML='<div class="scrim" data-closeprefs="1"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Ajustar preferencias de jugadoras"><div class="sheet-in"><div class="sheet-top"><div class="t"><h2>Preferencias por jugadora</h2></div><button type="button" class="btn alt" data-closeprefs="1">Cerrar</button></div><p class="hint">Indica qué líneas prefiere cada jugadora. El randomizador prioriza “Preferida”, puede asignar “Aceptable” y excluye “No juega”.</p>'+grid+'</div></div>';return;
+    }
     if(!state.open){root.innerHTML='';return}
     var k=state.open,L=k.charAt(0),cur=state.assign[k];
     var list=PLAYERS.slice().sort(function(a,b){
@@ -480,6 +497,29 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   }
   var clearTimer=null;
 
+  function randomizeLineup(){
+    resetPick();state.open=null;state.preferencesOpen=false;
+    var slots=[];ORDER.forEach(function(L){for(var i=0;i<state.counts[L];i++)slots.push(L+i)});
+    var best=null,bestFilled=-1,bestScore=-1;
+    // Repeated randomized greedy matching: keeps each player unique and favors higher preference scores.
+    for(var attempt=0;attempt<1800;attempt++){
+      var order=slots.slice().sort(function(){return Math.random()-.5});
+      var unused=PLAYERS.slice(),candidate={},filled=0,score=0;
+      order.forEach(function(k){
+        var L=k.charAt(0),eligible=unused.filter(function(p){return state.prefs[p.id][L]>0});
+        if(!eligible.length)return;
+        var top=Math.max.apply(null,eligible.map(function(p){return state.prefs[p.id][L]}));
+        var tied=eligible.filter(function(p){return state.prefs[p.id][L]===top});
+        var chosen=tied[Math.floor(Math.random()*tied.length)];
+        candidate[k]=chosen.id;unused=unused.filter(function(p){return p.id!==chosen.id});filled++;score+=top;
+      });
+      if(filled>bestFilled||(filled===bestFilled&&score>bestScore)){best=candidate;bestFilled=filled;bestScore=score}
+      if(filled===slots.length&&score===slots.length*2)break;
+    }
+    if(bestFilled!==slots.length){toast('No se pudo completar la formación con las preferencias actuales. Prueba marcando más líneas como “Aceptable”.');return}
+    state.assign=best;save();render();toast('Posiciones randomizadas según las preferencias');
+  }
+
   function applyPlan(){
     if(!state.armed||!state.preview)return;
     place(state.preview,state.armed);
@@ -492,8 +532,11 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
   window.addEventListener('resize',drawArrows);
 
   document.addEventListener('click',function(e){
-    var t=e.target.closest('[data-preset],[data-step],[data-slot],[data-pid],[data-pick],[data-close],[data-cancel],[data-apply],#copy,#clear');
+    var t=e.target.closest('[data-preset],[data-step],[data-slot],[data-pid],[data-pick],[data-close],[data-closeprefs],[data-cancel],[data-apply],#copy,#clear,#randomize,#editPrefs');
     if(!t)return;
+    if(t.id==='editPrefs'){state.preferencesOpen=true;state.open=null;renderSheet();return}
+    if(t.dataset.closeprefs){state.preferencesOpen=false;render();return}
+    if(t.id==='randomize'){randomizeLineup();return}
     if(t.dataset.preset){
       var v=t.dataset.preset.split(',').map(Number);
       setCount('D',v[0]);setCount('M',v[1]);setCount('F',v[2]);
@@ -547,8 +590,11 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
       else{state.clearAsk=true;renderSum();clearTimeout(clearTimer);clearTimer=setTimeout(function(){state.clearAsk=false;renderSum()},3000)}
     }
   });
+  document.addEventListener('change',function(e){
+    var t=e.target;if(t&&t.dataset&&t.dataset.pref&&t.dataset.line){state.prefs[t.dataset.pref][t.dataset.line]=parseInt(t.value,10);save();renderSheet();}
+  });
   document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'){if(state.open){state.open=null;render()}else if(state.armed){resetPick();render()}}
+    if(e.key==='Escape'){if(state.preferencesOpen){state.preferencesOpen=false;render()}else if(state.open){state.open=null;render()}else if(state.armed){resetPick();render()}}
   });
 
   render();
